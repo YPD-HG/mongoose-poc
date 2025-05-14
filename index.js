@@ -1,6 +1,7 @@
 const express = require('express')
 const mongoose = require('mongoose')
 const jwt = require('jsonwebtoken')
+const bcrypt = require('bcrypt')
 const { UserModel, TodoModel } = require('./db')
 const app = express()
 JWT_SECRET = "yash2000deep"
@@ -13,15 +14,25 @@ app.post('/signup', async function (req, res) {
     const email = req.body.email
     const password = req.body.password
     const name = req.body.name
-
-    let user_cred = await UserModel.create({
-        email: email,
-        password: password,
-        name: name
-    })
-    res.json({
-        message: "Logged in!"
-    })
+    let errorFound = 0;
+    try {
+        let hashPassword = await bcrypt.hash(password, 5)
+        console.log("HashPassword :", hashPassword)
+        await UserModel.create({
+            email: email,
+            password: hashPassword,
+            name: name
+        })
+    } catch (error) {
+        errorFound = 1;
+        res.json({
+            mesage: "User already exists"
+        })
+    }
+    if (!errorFound)
+        res.json({
+            message: "Logged in!"
+        })
 })
 
 app.post('/signin', async function (req, res) {
@@ -29,22 +40,30 @@ app.post('/signin', async function (req, res) {
     const password = req.body.password;
 
     let user = await UserModel.findOne({
-        email: email,
-        password: password
+        email: email
     })
 
     if (user) {
-        const token = jwt.sign({
-            id: user._id.toString()
-        }, JWT_SECRET)
-        res.json({
-            token
-        })
+        const passwordMatch = await bcrypt.compare(password, user.password);
+
+        if (!passwordMatch) {
+            res.status(403).json({
+                message: "Password doesn't match"
+            })
+        } else {
+            const token = jwt.sign({
+                id: user._id.toString()
+            }, JWT_SECRET)
+            res.json({
+                token
+            })
+        }
     } else {
         res.status(403).json({
-            message: "Incorrect Credentials"
+            message: "User doesn't exist in our DB"
         })
     }
+
 })
 
 async function auth(req, res, next) {
